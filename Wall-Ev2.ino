@@ -1,3 +1,5 @@
+#include <ArduinoSTL.h>
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 //  Programme Asservissement de la trajectoire et des mouvements du petit robot ARFIT
 //  ATOMARFIT 2019  
@@ -6,6 +8,8 @@
 //
 #include <math.h>
 
+//Own class
+#include "Position.h"
 
 //Bibliothèque qui gère le timer des asservissements
 # include <DueTimer.h>
@@ -198,33 +202,31 @@ int changementAllerA = 0;
 char etatAllerA;
 char etatReculerVers;
 
-
-
-
 float pi = 3.141592654;
 float c = 0;
 float s = 0;
 float CapObjectif = 0;
 
-
 String couleur = "";
 
 unsigned long startMillis=millis();    // Top départ  pour calcul de la durée du RUN
 unsigned long tip, top;
+Position positionRobot(xt, yt, thetat);
 
+#include "Task.h"
 
-
-
-
-
-
-
-
-
-
+std::vector<MoveTask> listTask;
+std::vector<String> listTaskType;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 void setup() {
+
+  listTask.push_back(MoveTask(Position(50,0,0), 10000));
+  listTaskType.push_back("MoveTask");
+  
+  listTask.push_back(MoveTask(Position(20,0,0), 10000));
+  listTaskType.push_back("MoveTask");
+    
   pinMode(interCouleur, INPUT_PULLUP);
   pinMode(tirette, INPUT_PULLUP);
 
@@ -239,6 +241,7 @@ void setup() {
   pinMode(MD_IN1, OUTPUT);
   pinMode(MD_IN2, OUTPUT);
 
+  pinMode(LED_BUILTIN, OUTPUT);
   
 // display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 // display.display();
@@ -247,11 +250,6 @@ void setup() {
   // Initialisation de la  com série.
   Serial.begin(9600);
   Serial.println("Dans le setup");
-
-  
-
-  
- 
 
   //Capteurs de collision
   pinMode(captAvDroit, INPUT);
@@ -264,8 +262,7 @@ void setup() {
   attachInterrupt(Enc_RCG_VA, fmCG_A, RISING);
   attachInterrupt(Enc_RCD_VA, fmCD_A, RISING);
 
-
-top=millis();
+  top=millis();
   
   // Paramètrage et lancement de la tâche périodique: basé sur la librairie "DueTimer.h"
   // Timer.getAvailable().attachInterrupt(asservissementMD).setFrequency(1000.0/TECOMMANDE).start();
@@ -275,7 +272,6 @@ top=millis();
 //  Timer4.getAvailable().attachInterrupt(asservissement_translaterR).setFrequency(1000/TECOMMANDE);
  // Timer5.getAvailable().attachInterrupt(odometrie).setFrequency(1000.0/TECOMMANDE).start();
   Timer5.getAvailable().attachInterrupt(odometrie).start(10000); //  toutes les 10 ms.
-
 
 
 
@@ -313,8 +309,17 @@ top=millis();
 //  } // Tant que (La tirette n'est pas tirée) --> Boucle infine
   
   startMillis = millis();    //  On prend le top debut partie au tirage tirette.
+  Serial.println("Starting");
 
-  
+  int moveTaskIndex = 0;
+  for (int indexTask=0; indexTask<listTaskType.size(); indexTask++) {
+   if(listTaskType[indexTask] == "MoveTask"){
+      MoveTask task = listTask[moveTaskIndex];
+      Serial.print("I'm doing a task");
+      task.execute();
+      moveTaskIndex++;
+    }
+  }  
 }
 ///fin setup()///////////////////////////////////////////////////////////////////////////
 
@@ -323,18 +328,17 @@ top=millis();
 
 
 ////////////////////////////////////////////////////////////////////////////////////////
-void loop() 
-{
+void loop()  {
 
   
 //  while(millis()<=(startMillis+99000))
 //  {
 
 //  /*
-if(millis()-top>TEDATA){
-  Serial.print(xt);Serial.print('\t');Serial.print(yt);Serial.print('\t');Serial.println(thetat);
-top=millis();
-}
+  /*if(millis()-top>TEDATA){
+    SerialUSB.print(xt);SerialUSB.print('\t');SerialUSB.print(yt);SerialUSB.print('\t');SerialUSB.println(thetat);
+    top=millis();
+  }*/
 //  */   
    
 //    display.setTextSize(4);
@@ -350,19 +354,17 @@ top=millis();
 //    Timer3.stop();
 //    Timer4.stop();
 //   Timer5.stop();
-    
-  
   
 
   //-----  Traitement des trames en réception ------------------
-  while (Serial.available()) {
-    char c    = Serial.read();  // Consomme un octet sur le buffer de réception et l'affecte à  c.
-    float val = Serial.parseFloat();
+  /*while (SerialUSB.available()) {
+    char c    = SerialUSB.read();  // Consomme un octet sur le buffer de réception et l'affecte à  c.
+    float val = SerialUSB.parseFloat();
 
     switch (c) {
       case 'T' :    //translation (cm)
-       Serial.print("Reception msg T,  val= ");Serial.println(val);
-       TranslaterDe(val);
+       SerialUSB.print("Reception msg T,  val= ");SerialUSB.println(val);
+       TranslaterDe(val, 10000);
        
       break;
       
@@ -378,11 +380,7 @@ top=millis();
       
       default:;
     }
-  }
-  // ----Fin du traitement des réceptions rx.
-
-//  }
-  
+  }*/  
 }
 /////fin void loop()//////////////////////////////////////////////////////////////////////////
 
@@ -398,21 +396,21 @@ void EcritureData(void) {
 
     if ( TempsCourant - TempsDernierEnvoi > TEDATA) {
 
-      Serial.print(temps);
-      Serial.print(",");
-      Serial.print(CommandeMG);
-      Serial.print(",");
-      Serial.print(CommandeMD);
-      Serial.print(",");
-      Serial.print(omegaMG);
-      Serial.print(",");
-      Serial.print(omegaMD);
-      Serial.print(",");
-      Serial.print(ConsigneVitesseRotMD);
-      Serial.print(",");
-      Serial.print(ConsigneVitesseRotMG);
-      Serial.print(";");
-      Serial.print("\r"); Serial.print("\n");
+      SerialUSB.print(temps);
+      SerialUSB.print(",");
+      SerialUSB.print(CommandeMG);
+      SerialUSB.print(",");
+      SerialUSB.print(CommandeMD);
+      SerialUSB.print(",");
+      SerialUSB.print(omegaMG);
+      SerialUSB.print(",");
+      SerialUSB.print(omegaMD);
+      SerialUSB.print(",");
+      SerialUSB.print(ConsigneVitesseRotMD);
+      SerialUSB.print(",");
+      SerialUSB.print(ConsigneVitesseRotMG);
+      SerialUSB.print(";");
+      SerialUSB.print("\r"); SerialUSB.print("\n");
       TempsDernierEnvoi = TempsCourant;
       i++;
       if (i == DataSize) {ChangeCmd = 0;
@@ -421,5 +419,3 @@ void EcritureData(void) {
  }
 }
 //--------------------------------------------------------------------------------------------------------------//
-
-
